@@ -11,7 +11,13 @@ const DEFAULT_DATA = {
     { id: 3, name: 'Makanan', type: 'expense' },
     { id: 4, name: 'Tabungan Masa Depan', type: 'savings' }
   ],
-  budgets: []
+  budgets: [],
+  milestones: [
+    { id: 1, name: 'Sultan Baru', description: 'Transaksi pertama kali', icon: '🌟', condition: 'transaction_count', target: 1 },
+    { id: 2, name: 'Si Rajin Nabung', description: 'Menabung lebih dari Rp 1.000.000', icon: '💰', condition: 'savings_amount', target: 1000000 },
+    { id: 3, name: 'Pengguna Setia', description: 'Diberikan secara khusus oleh Admin', icon: '👑', condition: 'manual', target: 0 }
+  ],
+  user_badges: []
 };
 
 module.exports = {

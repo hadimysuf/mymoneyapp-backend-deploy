@@ -11,6 +11,9 @@ function createAuthController({ db }) {
       }
 
       await db.createUser(result.value);
+      // Salin kategori default saat pertama register
+      await db.initUserData(result.value.id);
+      
       return res.status(201).json(buildAuthPayload(result.value, createAuthToken(result.value)));
     },
 
@@ -19,6 +22,9 @@ function createAuthController({ db }) {
       if (result.error) {
         return jsonError(res, 401, result.error);
       }
+
+      // Pastikan pengguna lama yang belum punya kategori otomatis diinisialisasi
+      await db.initUserData(result.value.id);
 
       return res.json(buildAuthPayload(result.value, createAuthToken(result.value)));
     }

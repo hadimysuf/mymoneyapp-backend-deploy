@@ -4,16 +4,16 @@ const { jsonError, parseId } = require('../utils/common');
 function createTransactionsController({ db }) {
   return {
     async list(req, res) {
-      return res.json(await db.listTransactions());
+      return res.json(await db.listTransactions(req.userId));
     },
 
     async create(req, res) {
-      const result = await validateTransactionPayload(db, req.body);
+      const result = await validateTransactionPayload(db, req.userId, req.body);
       if (result.error) {
         return jsonError(res, 400, result.error);
       }
 
-      await db.createTransaction(result.value);
+      await db.createTransaction(req.userId, result.value);
       return res.status(201).json(result.value);
     },
 
@@ -23,17 +23,17 @@ function createTransactionsController({ db }) {
         return jsonError(res, 400, 'Transaction id is invalid.');
       }
 
-      const existingTransaction = await db.findTransactionById(transactionId);
+      const existingTransaction = await db.findTransactionById(req.userId, transactionId);
       if (!existingTransaction) {
         return jsonError(res, 404, 'Transaction not found.');
       }
 
-      const result = await validateTransactionPayload(db, req.body, { existingTransaction });
+      const result = await validateTransactionPayload(db, req.userId, req.body, { existingTransaction });
       if (result.error) {
         return jsonError(res, 400, result.error);
       }
 
-      const updatedTransaction = await db.updateTransaction(transactionId, {
+      const updatedTransaction = await db.updateTransaction(req.userId, transactionId, {
         ...result.value,
         id: transactionId
       });
@@ -47,12 +47,12 @@ function createTransactionsController({ db }) {
         return jsonError(res, 400, 'Transaction id is invalid.');
       }
 
-      const existing = await db.findTransactionById(transactionId);
+      const existing = await db.findTransactionById(req.userId, transactionId);
       if (!existing) {
         return jsonError(res, 404, 'Transaction not found.');
       }
 
-      await db.deleteTransaction(transactionId);
+      await db.deleteTransaction(req.userId, transactionId);
       return res.json({ message: 'Deleted' });
     }
   };

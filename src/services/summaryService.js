@@ -3,11 +3,11 @@ const { normalizeCategoryRecord } = require('./categoryService');
 const { getIncomeGroup } = require('./incomeService');
 const { inferTransactionFlow } = require('./transactionService');
 
-async function calculateSummary(db) {
+async function calculateSummary(db, userId) {
   const [transactions, budgets, categories] = await Promise.all([
-    db.listTransactions(),
-    db.listBudgets(),
-    db.listCategories()
+    db.listTransactions(userId),
+    db.listBudgets(userId),
+    db.listCategories(userId)
   ]);
 
   const categoryById = new Map(categories.map((category) => [category.id, normalizeCategoryRecord(category)]));

@@ -6,7 +6,8 @@ function sanitizeUser(user) {
     id: user.id,
     name: user.name,
     email: user.email,
-    role: 'user'
+    role: user.role || 'user',
+    status: user.status || 'active'
   };
 }
 
@@ -27,7 +28,8 @@ function normalizeUserRecord(user) {
     name: normalizeString(user.name) || 'User MyMoney',
     email: normalizedEmail,
     password_hash: rawPasswordHash || (legacyPassword ? hashPassword(legacyPassword) : ''),
-    role: 'user'
+    role: user.role || 'user',
+    status: user.status || 'active'
   };
 }
 
@@ -53,7 +55,7 @@ async function validateRegisterPayload(db, body) {
   }
 
   if (await getUserByEmail(db, email)) {
-    return { error: 'Email sudah terdaftar.' };
+    return { error: 'Email sudah digunakan.' };
   }
 
   return {
@@ -62,7 +64,8 @@ async function validateRegisterPayload(db, body) {
       name,
       email,
       password_hash: hashPassword(password),
-      role: 'user'
+      role: 'user',
+      status: 'active'
     }
   };
 }
@@ -74,6 +77,10 @@ async function validateLoginCredentials(db, body) {
 
   if (!user || !verifyPassword(password, user.password_hash)) {
     return { error: 'Email atau password salah.' };
+  }
+
+  if (user.status === 'suspended') {
+    return { error: 'Akun ini telah ditangguhkan.' };
   }
 
   return { value: user };

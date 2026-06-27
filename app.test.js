@@ -6,10 +6,14 @@ const { once } = require('node:events');
 const { createApp, createMemoryDb, DEFAULT_DATA, hashPassword } = require('./app');
 
 function createSeedData(overrides = {}) {
+  // Ensure we assign user_id: 1 to default mock data if not overridden
+  const mockUserId = 1;
+  const mapWithUserId = (items) => items.map(item => ({ ...item, user_id: mockUserId }));
+
   return {
     users: [
       {
-        id: 1,
+        id: mockUserId,
         name: 'User MyMoney',
         email: 'user@mymoney.local',
         password_hash: hashPassword('user12345'),
@@ -17,9 +21,9 @@ function createSeedData(overrides = {}) {
       },
       ...(overrides.users || [])
     ],
-    transactions: [...DEFAULT_DATA.transactions, ...(overrides.transactions || [])],
-    categories: [...DEFAULT_DATA.categories, ...(overrides.categories || [])],
-    budgets: [...DEFAULT_DATA.budgets, ...(overrides.budgets || [])]
+    transactions: mapWithUserId([...DEFAULT_DATA.transactions, ...(overrides.transactions || [])]),
+    categories: mapWithUserId([...DEFAULT_DATA.categories, ...(overrides.categories || [])]),
+    budgets: mapWithUserId([...DEFAULT_DATA.budgets, ...(overrides.budgets || [])])
   };
 }
 
@@ -130,7 +134,7 @@ test('GET /api/transactions requires authorization token', async () => {
   });
 });
 
-test('POST /api/auth/register creates a new user with hashed password and returns a user session', async () => {
+test('POST /api/auth/register creates a new user with hashed password, initializes categories and returns a user session', async () => {
   await withApi(createSeedData({ users: [] }), async ({ baseUrl, db }) => {
     const register = await jsonRequest(baseUrl, '/api/auth/register', {
       method: 'POST',
@@ -144,11 +148,17 @@ test('POST /api/auth/register creates a new user with hashed password and return
     assert.equal(register.status, 201);
     assert.equal(register.body.user.role, 'user');
     assert.ok(register.body.token);
+    
+    const userId = register.body.user.id;
 
     const storedUser = await db.findOne('users', { email: 'alya@example.com' });
     assert.ok(storedUser);
     assert.ok(storedUser.password_hash);
     assert.notEqual(storedUser.password_hash, 'rahasia123');
+    
+    const userCategories = await db.listCategories(userId);
+    assert.equal(userCategories.length, 4); // should have 4 default categories
+    assert.ok(userCategories.every(c => c.user_id === userId));
 
     const login = await jsonRequest(baseUrl, '/api/auth/login', {
       method: 'POST',
@@ -752,4 +762,175 @@ test('PUT /api/transactions rejects edited savings withdrawals above available b
       assert.equal((await db.findOne('transactions', { id: 12002 })).amount, 50000);
     }
   );
+});
+
+test('GET /api/admin/users requires admin role, non-admin gets 403', async () => {
+  await withApi(
+    createSeedData({
+      users: [
+        {
+          id: 99,
+          name: 'Admin User',
+          email: 'admin@mymoney.local',
+          password_hash: hashPassword('admin12345'),
+          role: 'admin',
+          status: 'active'
+        }
+      ]
+    }),
+    async ({ baseUrl }) => {
+      const userToken = await loginAsUser(baseUrl);
+      const adminToken = await jsonRequest(baseUrl, '/api/auth/login', {
+        method: 'POST',
+        body: { email: 'admin@mymoney.local', password: 'admin12345' }
+      });
+      
+      // User request should return 403
+      const resUser = await jsonRequest(baseUrl, '/api/admin/users', {
+        headers: { authorization: `Bearer ${userToken}` }
+      });
+      assert.equal(resUser.status, 403);
+
+      // Admin request should return 200
+      const resAdmin = await jsonRequest(baseUrl, '/api/admin/users', {
+        headers: { authorization: `Bearer ${adminToken.body.token}` }
+      });
+      assert.equal(resAdmin.status, 200);
+      assert.ok(Array.isArray(resAdmin.body));
+    }
+  );
+});
+
+test('PATCH /api/admin/users/:id/status updates status and blocks login', async () => {
+  await withApi(
+    createSeedData({
+      users: [
+        {
+          id: 99,
+          name: 'Admin User',
+          email: 'admin@mymoney.local',
+          password_hash: hashPassword('admin12345'),
+          role: 'admin',
+          status: 'active'
+        }
+      ]
+    }),
+    async ({ baseUrl }) => {
+      const adminToken = await jsonRequest(baseUrl, '/api/auth/login', {
+        method: 'POST',
+        body: { email: 'admin@mymoney.local', password: 'admin12345' }
+      });
+
+      // Suspend user (id: 1)
+      const resUpdate = await jsonRequest(baseUrl, '/api/admin/users/1/status', {
+        method: 'PATCH',
+        headers: { authorization: `Bearer ${adminToken.body.token}` },
+        body: { status: 'suspended' }
+      });
+      assert.equal(resUpdate.status, 200);
+
+      // Try login as suspended user
+      const resLogin = await jsonRequest(baseUrl, '/api/auth/login', {
+        method: 'POST',
+        body: { email: 'user@mymoney.local', password: 'user12345' }
+      });
+      assert.equal(resLogin.status, 401);
+      assert.match(resLogin.body.error, /ditangguhkan/i);
+    }
+  );
+});
+
+test('GET /api/gamification evaluates automatic milestones and allows admin assignment', async () => {
+  await withApi(
+    createSeedData({
+      users: [
+        {
+          id: 99,
+          name: 'Admin User',
+          email: 'admin@mymoney.local',
+          password_hash: hashPassword('admin12345'),
+          role: 'admin',
+          status: 'active'
+        }
+      ],
+      transactions: [
+        {
+          id: 13001,
+          description: 'Tabungan bulanan',
+          amount: 500000,
+          type: 'savings',
+          flow: 'in',
+          category_id: 4,
+          date: '01/04/2026',
+          month: '2026-04',
+          timestamp: 13001,
+          user_id: 1
+        },
+        {
+          id: 13002,
+          description: 'Tabungan tambahan',
+          amount: 600000,
+          type: 'savings',
+          flow: 'in',
+          category_id: 4,
+          date: '02/04/2026',
+          month: '2026-04',
+          timestamp: 13002,
+          user_id: 1
+        }
+      ]
+    }),
+    async ({ baseUrl }) => {
+      const userToken = await loginAsUser(baseUrl);
+      const adminToken = await jsonRequest(baseUrl, '/api/auth/login', {
+        method: 'POST',
+        body: { email: 'admin@mymoney.local', password: 'admin12345' }
+      });
+
+      // Get progress for user (should automatically award "Si Rajin Nabung" because savings = 1,100,000 > 1,000,000)
+      const resProg = await jsonRequest(baseUrl, '/api/gamification', {
+        headers: { authorization: `Bearer ${userToken}` }
+      });
+      assert.equal(resProg.status, 200);
+      
+      const rajinNabung = resProg.body.find(m => m.id === 2);
+      assert.equal(rajinNabung.progress, 1100000);
+      assert.equal(rajinNabung.isCompleted, true);
+
+      const manualBadge = resProg.body.find(m => m.id === 3);
+      assert.equal(manualBadge.isCompleted, false);
+
+      // Admin assigns manual badge (id: 3) to user (id: 1)
+      const resAssign = await jsonRequest(baseUrl, '/api/admin/milestones/3/assign', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${adminToken.body.token}` },
+        body: { user_id: 1 }
+      });
+      assert.equal(resAssign.status, 200);
+
+      // Get progress for user again (should be completed now)
+      const resProg2 = await jsonRequest(baseUrl, '/api/gamification', {
+        headers: { authorization: `Bearer ${userToken}` }
+      });
+      const manualBadge2 = resProg2.body.find(m => m.id === 3);
+      assert.equal(manualBadge2.isCompleted, true);
+    }
+  );
+});
+
+test('POST /api/auth/register rejects duplicate email registration', async () => {
+  await withApi(createSeedData(), async ({ baseUrl }) => {
+    // Try to register with same email as 'user@mymoney.local' (which exists in seed)
+    const response = await jsonRequest(baseUrl, '/api/auth/register', {
+      method: 'POST',
+      body: {
+        name: 'Duplicate User',
+        email: 'user@mymoney.local',
+        password: 'password123'
+      }
+    });
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error, 'Email sudah digunakan.');
+  });
 });

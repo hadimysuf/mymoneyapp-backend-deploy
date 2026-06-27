@@ -21,8 +21,8 @@ function normalizeCategoryRecord(category) {
   return normalized;
 }
 
-async function getCategoryById(db, categoryId) {
-  return db.findCategoryById(categoryId);
+async function getCategoryById(db, userId, categoryId) {
+  return db.findCategoryById(userId, categoryId);
 }
 
 function buildCategoryPayload(body) {
@@ -53,8 +53,8 @@ function buildCategoryPayload(body) {
   return { value: payload };
 }
 
-async function hasDuplicateCategoryName(db, payload) {
-  const categories = await db.listCategories();
+async function hasDuplicateCategoryName(db, userId, payload) {
+  const categories = await db.listCategories(userId);
   return categories.some(
     (category) =>
       category.type === payload.type &&
@@ -62,8 +62,11 @@ async function hasDuplicateCategoryName(db, payload) {
   );
 }
 
-async function isCategoryReferenced(db, categoryId) {
-  const [transactions, budgets] = await Promise.all([db.listTransactions(), db.listBudgets()]);
+async function isCategoryReferenced(db, userId, categoryId) {
+  const [transactions, budgets] = await Promise.all([
+    db.listTransactions(userId),
+    db.listBudgets(userId)
+  ]);
 
   const isUsedInTransactions = transactions.some(
     (transaction) => transaction.category_id === categoryId

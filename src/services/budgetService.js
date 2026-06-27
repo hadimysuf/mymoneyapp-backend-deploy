@@ -1,14 +1,14 @@
 const { getCategoryById } = require('./categoryService');
 const { getCurrentMonth, formatLocalDate, parseId, parsePositiveAmount } = require('../utils/common');
 
-async function getCurrentMonthIncome(db, currentMonth) {
-  const transactions = await db.listTransactions();
+async function getCurrentMonthIncome(db, userId, currentMonth) {
+  const transactions = await db.listTransactions(userId);
   return transactions
     .filter((transaction) => transaction.month === currentMonth && transaction.type === 'income')
     .reduce((sum, transaction) => sum + transaction.amount, 0);
 }
 
-async function validateBudgetPayload(db, body) {
+async function validateBudgetPayload(db, userId, body) {
   const categoryId = parseId(body?.category_id);
   const amount = parsePositiveAmount(body?.amount);
 
@@ -20,7 +20,7 @@ async function validateBudgetPayload(db, body) {
     return { error: 'Budget amount must be a positive number.' };
   }
 
-  const category = await getCategoryById(db, categoryId);
+  const category = await getCategoryById(db, userId, categoryId);
   if (!category) {
     return { error: 'Budget category does not exist.' };
   }
@@ -32,8 +32,8 @@ async function validateBudgetPayload(db, body) {
   const now = new Date();
   const currentMonth = getCurrentMonth(now);
   const [budgets, totalIncomeThisMonth] = await Promise.all([
-    db.listBudgets(),
-    getCurrentMonthIncome(db, currentMonth)
+    db.listBudgets(userId),
+    getCurrentMonthIncome(db, userId, currentMonth)
   ]);
   const currentMonthAllocatedExcludingTarget = budgets
     .filter((budget) => budget.month === currentMonth && budget.category_id !== categoryId)

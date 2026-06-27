@@ -24,8 +24,8 @@ function inferTransactionFlow(transaction, category) {
   return 'out';
 }
 
-async function getFilteredTransactions(db, excludedTransactionId = null) {
-  const transactions = await db.listTransactions();
+async function getFilteredTransactions(db, userId, excludedTransactionId = null) {
+  const transactions = await db.listTransactions(userId);
   if (excludedTransactionId === null) {
     return transactions;
   }
@@ -33,7 +33,7 @@ async function getFilteredTransactions(db, excludedTransactionId = null) {
   return transactions.filter((transaction) => transaction.id !== excludedTransactionId);
 }
 
-async function validateTransactionPayload(db, body, options = {}) {
+async function validateTransactionPayload(db, userId, body, options = {}) {
   const existingTransaction = options.existingTransaction || null;
   const description = normalizeString(body?.description);
   const amount = parsePositiveAmount(body?.amount);
@@ -51,7 +51,7 @@ async function validateTransactionPayload(db, body, options = {}) {
     return { error: 'Transaction category_id is invalid.' };
   }
 
-  const category = await getCategoryById(db, categoryId);
+  const category = await getCategoryById(db, userId, categoryId);
   if (!category) {
     return { error: 'Transaction category does not exist.' };
   }
@@ -61,8 +61,8 @@ async function validateTransactionPayload(db, body, options = {}) {
   const requestedFlow = normalizeString(body?.flow);
   let flow = inferTransactionFlow({ flow: requestedFlow, description }, category);
   const [candidateTransactions, budgets] = await Promise.all([
-    getFilteredTransactions(db, existingTransaction?.id ?? null),
-    db.listBudgets()
+    getFilteredTransactions(db, userId, existingTransaction?.id ?? null),
+    db.listBudgets(userId)
   ]);
 
   if (category.type !== 'savings') {

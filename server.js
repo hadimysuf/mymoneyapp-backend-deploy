@@ -1,53 +1,29 @@
 require('dotenv').config();
-const { createApp } = require('./app');
 
-// =========================================================================
-// 1. BAGIAN UNTUK VERCEL (SERVERLESS)
-// Vercel akan membaca bagian export ini saat aplikasi di-deploy
-// =========================================================================
-let appInstance;
+const { createApp, createMemoryDb } = require('./app');
 
-module.exports = async (req, res) => {
-  // Jika aplikasi belum diinisialisasi, jalankan createApp()
-  if (!appInstance) {
-    try {
-      const { app } = await createApp();
-      appInstance = app;
-    } catch (error) {
-      console.error("Gagal melakukan inisialisasi aplikasi:", error);
-      return res.status(500).json({ error: "Internal Server Error" });
-    }
+const PORT = process.env.PORT || 3001;
+
+async function startServer() {
+  const options = process.env.MONGODB_URI ? {} : { db: createMemoryDb() };
+  if (!process.env.MONGODB_URI) {
+    console.warn('⚠️ MONGODB_URI tidak ditemukan, menggunakan In-Memory Database untuk testing lokal.');
   }
-  // Teruskan request dari user ke aplikasi Express
-  return appInstance(req, res);
-};
+  const { app, db } = await createApp(options);
+  const server = app.listen(PORT, () => console.log(`Backend Finansial siap di http://localhost:${PORT}`));
 
-// =========================================================================
-// 2. BAGIAN UNTUK LOKAL (LAPTOP)
-// Hanya akan dijalankan jika kamu mengetik "node server.js" di terminal
-// =========================================================================
-if (require.main === module) {
-  const PORT = process.env.PORT || 3001;
-
-  async function startServer() {
-    const { app, db } = await createApp();
-    const server = app.listen(PORT, () => {
-        console.log(`Backend Finansial siap di http://localhost:${PORT}`);
+  const shutdown = async () => {
+    server.close(async () => {
+      await db.close();
+      process.exit(0);
     });
+  };
 
-    const shutdown = async () => {
-      server.close(async () => {
-        await db.close();
-        process.exit(0);
-      });
-    };
-
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
-  }
-
-  startServer().catch((error) => {
-    console.error('Gagal menjalankan backend:', error);
-    process.exit(1);
-  });
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
+
+startServer().catch((error) => {
+  console.error('Gagal menjalankan backend:', error);
+  process.exit(1);
+});
