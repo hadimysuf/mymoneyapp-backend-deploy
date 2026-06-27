@@ -33,7 +33,7 @@ function createAuthMiddleware(db) {
 
 function createAdminMiddleware() {
   return (req, res, next) => {
-    if (req.userRole !== 'admin') {
+    if (req.userRole?.toLowerCase() !== 'admin') {
       return jsonError(res, 403, 'Forbidden. Admin role required.');
     }
     return next();

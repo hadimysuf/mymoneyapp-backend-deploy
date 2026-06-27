@@ -6,7 +6,7 @@ function sanitizeUser(user) {
     id: user.id,
     name: user.name,
     email: user.email,
-    role: user.role || 'user',
+    role: (user.role || 'user').toLowerCase(),
     status: user.status || 'active'
   };
 }
@@ -28,7 +28,7 @@ function normalizeUserRecord(user) {
     name: normalizeString(user.name) || 'User MyMoney',
     email: normalizedEmail,
     password_hash: rawPasswordHash || (legacyPassword ? hashPassword(legacyPassword) : ''),
-    role: user.role || 'user',
+    role: (user.role || 'user').toLowerCase(),
     status: user.status || 'active'
   };
 }

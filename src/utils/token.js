@@ -16,7 +16,7 @@ function createAuthToken(user) {
   return jwt.sign(
     {
       sub: String(user.id),
-      role: user.role || 'user'
+      role: (user.role || 'user').toLowerCase()
     },
     getJwtSecret(),
     { expiresIn: '7d' }
